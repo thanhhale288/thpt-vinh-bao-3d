@@ -4,7 +4,7 @@
   "description": "Dạo quanh khuôn viên THPT Vĩnh Bảo cùng cựu học sinh.",
   "start_url": "/",
   "display": "standalone",
-  "orientation": "any",
+  "orientation": "landscape",
   "background_color": "#0f111a",
   "theme_color": "#c62828",
   "icons": [

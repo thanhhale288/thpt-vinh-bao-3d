@@ -474,6 +474,25 @@ const mbClass = $('mbClass');
 if (mbClass) mbClass.addEventListener('click', () => (classOpen ? closeClass() : openClass()));
 if (matchMedia('(pointer: coarse)').matches) document.body.classList.add('touch');
 
+function syncOrientationUi() {
+  const touch = isTouchPlay();
+  const portrait = touch && matchMedia('(orientation: portrait)').matches;
+  document.body.classList.toggle('portrait', portrait);
+  document.body.classList.toggle('landscape', touch && !portrait);
+  const hint = $('rotateHint');
+  // Chỉ chặn khi đang chơi — màn tạo nhân vật vẫn xem được khi dọc
+  if (hint) hint.hidden = !(portrait && started);
+}
+function lockLandscape() {
+  const o = screen.orientation;
+  if (!o?.lock) return;
+  o.lock('landscape').catch(() => {});
+}
+syncOrientationUi();
+matchMedia('(orientation: portrait)').addEventListener('change', syncOrientationUi);
+addEventListener('orientationchange', syncOrientationUi);
+addEventListener('resize', syncOrientationUi);
+
 // ---------- UI ----------
 let toastTimer;
 function toast(text, ms = 2600) {
@@ -1500,7 +1519,9 @@ function start() {
   toast(`Chào mừng bạn về trường! Tìm ${TOTAL} kỷ vật đang phát sáng, sút bóng & xem album ảnh thật nhé.`, 5200);
   pushStats();
   if (isTouchPlay()) {
-    setTimeout(() => toast('Joystick góc trái để đi; kéo vùng phải xoay camera; hai ngón zoom.', 5200), 1200);
+    lockLandscape();
+    syncOrientationUi();
+    setTimeout(() => toast('Chơi ngang: joystick trái · kéo nửa phải xoay camera · hai ngón zoom.', 5200), 1200);
   } else {
     setTimeout(() => toast('Chuột xoay góc nhìn · giữ Ctrl hiện chuột · Esc thả chuột · popup (E) không cần chuột.', 5200), 1200);
     requestLookLock();

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="screen-orientation" content="landscape">
   <meta name="theme-color" content="#8e2a22">
   <title>THPT Vĩnh Bảo – Ký ức sân trường</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
@@ -144,6 +145,13 @@
     </div>
   </div>
 
+  <div id="rotateHint" hidden>
+    <div class="rotate-card">
+      <div class="rotate-icon" aria-hidden="true"></div>
+      <p><b>Xoay ngang điện thoại</b></p>
+      <p>Game chơi theo chiều ngang — xoay máy rồi tiếp tục.</p>
+    </div>
+  </div>
   <div id="joy" aria-label="Joystick di chuyển" role="application"><div id="knob"></div></div>
   <nav id="mobileBar" aria-label="Điều khiển điện thoại">
     <button id="mbMap" type="button">Bản đồ</button>
@@ -170,7 +178,7 @@
           <li><kbd>W A S D</kbd> di chuyển, <kbd>Shift</kbd> chạy, <kbd>Space</kbd> nhảy</li>
           <li>Di chuyển chuột xoay góc nhìn · giữ <kbd>Ctrl</kbd> hiện chuột (HUD/gõ) · <kbd>Esc</kbd> thả chuột · popup đọc bằng <kbd>E</kbd> không cần chuột · lăn zoom</li>
           <li><kbd>E</kbd> tương tác, <kbd>M</kbd> bật/tắt bản đồ, <kbd>T</kbd> chat</li>
-          <li>Trên điện thoại: <b>joystick</b> góc trái dưới để đi; kéo <b>nửa phải</b> màn hình để xoay; hai ngón zoom; nút <b>Nhảy</b> và <b>E</b> góc phải; thanh <b>Bản đồ / Chat / Lớp</b> ở dưới</li>
+          <li>Điện thoại: <b>xoay ngang</b> · joystick trái đi · kéo nửa phải xoay camera · hai ngón zoom · <b>Nhảy / E</b> góc phải · thanh Bản đồ / Chat / Lớp giữa dưới</li>
         </ul>
         <p id="inviteNote" class="invite-note" hidden></p>
         <div id="resumeBlock" class="resume-block" hidden>
