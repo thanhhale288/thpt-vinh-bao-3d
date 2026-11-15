@@ -488,7 +488,7 @@ export function buildWorld(scene) {
         x: entry.x, z: entry.z, r: 3.2,
         label: 'Cầu thang lên tầng trên',
         title: 'Sảnh cầu thang',
-        text: '① Từ hành lang vào sảnh, đi thẳng vào trong (theo hướng nhìn) xuống đợt 1. ② Chiếu nghỉ sát vách gạch bông — đi ngang sang đợt 2. ③ Lên tầng trên, lặp lại. Thang sắt lên mái chỉ ở chiếu nghỉ tầng 2→3 (sau khi lên tầng 3 một đoạn rồi quay lại chiếu nghỉ sâu trong): đứng sát thang, giữ W leo, S xuống, Space buông tay.',
+        text: '① Từ hành lang vào sảnh, đi thẳng vào trong (theo hướng nhìn) xuống đợt 1. ② Chiếu nghỉ sát vách gạch bông — đi ngang sang đợt 2. ③ Lên tầng trên, lặp lại. Thang sắt lên mái chỉ ở chiếu nghỉ tầng 2→3 (sau khi lên tầng 3 một đoạn rồi quay lại chiếu nghỉ sâu trong): đứng sát thang, bấm E để bám, rồi W/S leo, Space buông tay.',
       });
     }
     // sàn mái đi được (chừa lỗ thang sắt) + lan can mái có va chạm
@@ -555,7 +555,7 @@ export function buildWorld(scene) {
       x: 0, z: AZ, r: 14, minY: 9.6,
       label: 'Mái nhà học chính',
       title: 'Trên nóc trường',
-      text: 'Nhìn xuống sân trong, sảnh và cây xanh. Leo xuống bằng thang sắt trong sảnh cầu thang hai bên sân khấu. Cẩn thận lan can mé mái!',
+      text: 'Nhìn xuống sân trong, sảnh và cây xanh. Đứng sát lỗ thang sắt, bấm E để leo xuống. Cẩn thận lan can mé mái!',
     });
   }
   // Nhà vệ sinh học sinh — bên phải dãy nhà học chính, quay cửa ra sân trong

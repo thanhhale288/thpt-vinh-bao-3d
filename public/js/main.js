@@ -1067,6 +1067,24 @@ function nearest() {
       bd = dist - 0.6;
     }
   }
+  if (!player.ladder) for (const ld of world.ladders || []) {
+    const dHang = Math.hypot(player.pos.x - ld.x, player.pos.z - ld.z);
+    const dBot = ld.bottom ? Math.hypot(player.pos.x - ld.bottom.x, player.pos.z - ld.bottom.z) : dHang;
+    const dTop = ld.top ? Math.hypot(player.pos.x - ld.top.x, player.pos.z - ld.top.z) : dHang;
+    const nearBot = Math.abs(player.feetY - ld.y0) < 0.65 && Math.min(dHang, dBot) < 1.15;
+    const nearTop = player.feetY > ld.y1 - 0.85 && player.feetY < ld.y1 + 0.55 && Math.min(dHang, dTop) < 1.2;
+    if (!nearBot && !nearTop) continue;
+    const score = nearTop ? Math.min(dHang, dTop) - 0.35 : Math.min(dHang, dBot) - 0.25;
+    if (score < bd) {
+      best = {
+        label: nearTop ? 'Leo xuống thang sắt (E)' : 'Leo lên mái bằng thang sắt (E)',
+        action: 'ladder',
+        ladder: ld,
+        fromTop: nearTop,
+      };
+      bd = score;
+    }
+  }
   for (const n of npcs) {
     const d = Math.hypot(n.pos.x - player.pos.x, n.pos.z - player.pos.z);
     const near = n.vendor ? 2.35 : 2.2;
@@ -1109,6 +1127,10 @@ function use() {
   }
   if (current.action === 'bikeToggle') {
     toggleBikeAtShed();
+    return;
+  }
+  if (current.action === 'ladder') {
+    mountLadder(current.ladder, current.fromTop);
     return;
   }
   if (current.action === 'drum') {
@@ -1212,26 +1234,38 @@ function drawMap() {
 const angLerp = (a, b, t) => a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * t;
 const tmp = new THREE.Vector3();
 
-// Thang sắt: đứng sát thang + W (hoặc S khi ở trên mái) để bám; khi bám thì W/S leo, thả phím vẫn bám,
-// lên tới đỉnh tự bước ra mái, xuống tới chân tự đứng lên chiếu nghỉ, Nhảy (Space) để buông tay.
+// Thang sắt: bấm E khi sát chân/đỉnh để bám; W/S leo; lên đỉnh / xuống chân tự ra; Space buông tay.
+// Chỉ tự bám khi đang rơi xuyên lỗ mái (tránh tụt xuống tầng dưới ngoài ý muốn).
+function mountLadder(ld, fromTop) {
+  if (!ld || player.ladder) return;
+  if (performance.now() < (player.ladderLockUntil || 0)) return;
+  if (player.onBike) dismountBike(player, scene, player.char.root, player.feetY, player.facing);
+  if (player.pose) clearPlayerPose();
+  player.ladder = ld;
+  player.vel.set(0, 0, 0);
+  player.vy = 0;
+  player.feetY = fromTop ? ld.y1 - 0.35 : ld.y0 + 0.08;
+  player.pos.x = ld.x;
+  player.pos.z = ld.z;
+  player.facing = ld.face;
+  toast(fromTop ? 'Đang trên thang — S xuống, W lên, Space buông.' : 'Đang trên thang — W lên mái, S xuống, Space buông.', 3200);
+}
+
 function climbLadder(dt, ox, oz) {
   const p = player.pos;
   const up = keys.has('KeyW') || keys.has('ArrowUp') || joy.y < -0.3;
   const dn = keys.has('KeyS') || keys.has('ArrowDown') || joy.y > 0.3;
   const blocked = dialogOpen || menuOpen || bookOpen || chatOpen || classOpen || !started;
-  if (!player.ladder && !blocked && performance.now() >= (player.ladderLockUntil || 0)) {
+  // Rơi xuyên lỗ mái → bắt thang (không tự bám khi đi bộ / giữ W).
+  if (!player.ladder && !blocked && !player.grounded && player.vy < -0.4
+    && performance.now() >= (player.ladderLockUntil || 0)) {
     for (const ld of world.ladders || []) {
-      const dHang = Math.hypot(ox - ld.x, oz - ld.z);
-      const dBot = ld.bottom ? Math.hypot(ox - ld.bottom.x, oz - ld.bottom.z) : dHang;
-      const atBottom = Math.abs(player.feetY - ld.y0) < 0.55 && up && Math.min(dHang, dBot) < 0.95;
-      // trên mái: bước tới sát lỗ chui là tự bám thang (không rơi tụt xuống)
-      const atTop = player.feetY > ld.y1 - 1.2 && player.feetY < ld.y1 + 0.5 && dHang < 0.8;
-      if (atBottom || atTop) {
-        player.ladder = ld;
-        player.feetY = atTop ? ld.y1 - 0.3 : ld.y0 + 0.05;
-        if (player.pose) clearPlayerPose();
-        break;
-      }
+      if (Math.hypot(ox - ld.x, oz - ld.z) > 0.7) continue;
+      if (player.feetY < ld.y0 - 0.2 || player.feetY > ld.y1 + 0.4) continue;
+      player.ladder = ld;
+      player.feetY = Math.min(ld.y1 - 0.2, Math.max(ld.y0 + 0.05, player.feetY));
+      if (player.pose) clearPlayerPose();
+      break;
     }
   }
   const ld = player.ladder;
