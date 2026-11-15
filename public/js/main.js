@@ -272,7 +272,10 @@ function queueJump() {
   jumpQueued = true;
   jumpQueuedUntil = performance.now() + JUMP_BUFFER_MS;
 }
-let yaw = 0, pitch = 0.3, dist = 7, camD = 7;
+let yaw = 0, pitch = 0.28, dist = 4.2, camD = 4.2;
+/** Bù nhẹ khi bị trần/sàn chắn — ưu tiên vẫn là kéo camera gần (camD). */
+let camPitchBoost = 0, camYBoost = 0;
+const CAM_DIST_MIN = 1.6, CAM_DIST_MAX = 12;
 let started = false, dialogOpen = false, menuOpen = false, mapOn = true, bookOpen = false, chatOpen = false, classOpen = false;
 let galleryOpen = false, boardOpen = false;
 
@@ -381,7 +384,7 @@ function ptrOnUi(el) {
 }
 
 const pinchPts = new Map();
-const pinch = { base: null, dist0: 7 };
+const pinch = { base: null, dist0: 4.2 };
 function syncPinchBase() {
   if (pinchPts.size !== 2) { pinch.base = null; return; }
   const [a, b] = [...pinchPts.values()];
@@ -392,7 +395,7 @@ function applyPinch() {
   if (pinchPts.size !== 2 || pinch.base == null || pinch.base < 1) return;
   const [a, b] = [...pinchPts.values()];
   const d = Math.hypot(a.x - b.x, a.y - b.y);
-  dist = clamp(pinch.dist0 * (d / pinch.base), 2.5, 18);
+  dist = clamp(pinch.dist0 * (d / pinch.base), CAM_DIST_MIN, CAM_DIST_MAX);
 }
 function trackPinch(e, down) {
   if (!started || e.pointerType !== 'touch') return;
@@ -459,7 +462,7 @@ addEventListener('pointerup', endPointer);
 addEventListener('pointercancel', endPointer);
 addEventListener('wheel', e => {
   if (!started || uiBlocksGame() || ptrOnUi(e.target)) return;
-  dist = clamp(dist + e.deltaY * 0.01, 2.5, 18);
+  dist = clamp(dist + e.deltaY * 0.01, CAM_DIST_MIN, CAM_DIST_MAX);
   e.preventDefault();
 }, { passive: false });
 $('btnUse').addEventListener('pointerdown', e => { e.preventDefault(); use(); });
@@ -1434,11 +1437,33 @@ function updateCollectibles(t, dt) {
 }
 
 function updateCamera(dt) {
-  const target = tmp.set(player.pos.x, player.feetY + 1.45, player.pos.z);
-  const dir = new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
-  const hit = Math.max(0.8, col.rayDist(target, dir, dist) - 0.3);
-  camD += (hit - camD) * Math.min(1, dt * (hit < camD ? 25 : 4));
+  const baseEye = player.feetY + 1.45;
+  // Bước 1: boost pitch hiện có → đo vật chắn trên đoạn mắt→camera.
+  let pitchUse = clamp(pitch + camPitchBoost, -0.15, 1.35);
+  const target = tmp.set(player.pos.x, baseEye + camYBoost * 0.4, player.pos.z);
+  const dir = new THREE.Vector3(
+    Math.sin(yaw) * Math.cos(pitchUse),
+    Math.sin(pitchUse),
+    Math.cos(yaw) * Math.cos(pitchUse),
+  );
+  const q = col.camQuery(target, dir, dist);
+  camPitchBoost += (q.pitchLift - camPitchBoost) * Math.min(1, dt * (q.pitchLift > camPitchBoost ? 10 : 3));
+  camYBoost += (q.yLift - camYBoost) * Math.min(1, dt * (q.yLift > camYBoost ? 10 : 3.5));
+
+  // Bước 2: hướng đã nâng — mọi vật chắn (tường, lan can, sàn, cột…) đều rút camD.
+  pitchUse = clamp(pitch + camPitchBoost, -0.15, 1.35);
+  dir.set(
+    Math.sin(yaw) * Math.cos(pitchUse),
+    Math.sin(pitchUse),
+    Math.cos(yaw) * Math.cos(pitchUse),
+  );
+  target.set(player.pos.x, baseEye + camYBoost * 0.45, player.pos.z);
+  const hit = Math.max(0.75, col.camQuery(target, dir, dist).dist);
+  // Kéo gần rất nhanh khi có chắn; nhả vừa phải khi hết chắn.
+  camD += (hit - camD) * Math.min(1, dt * (hit < camD ? 28 : 6));
+
   camera.position.copy(target).addScaledVector(dir, camD);
+  camera.position.y += camYBoost * 0.5;
   camera.position.y = Math.max(0.35, camera.position.y);
   camera.lookAt(target);
 }
