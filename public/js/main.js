@@ -292,7 +292,13 @@ function releaseGameFocus() {
   if (ae?.blur && ae !== document.body) ae.blur();
 }
 
+let ctrlHeld = false;
 addEventListener('keydown', e => {
+  // Ctrl: hiện chuột (bấm/giữ). Thả Ctrl → khóa lại nếu không đang mở UI cần click/gõ.
+  if ((e.code === 'ControlLeft' || e.code === 'ControlRight') && started && !isTouchPlay()) {
+    if (!e.repeat) { ctrlHeld = true; exitLookLock(); }
+    return;
+  }
   if (!started || menuOpen || formFocusBlocksKeys()) return;
   if (e.code === 'KeyE' || e.code === 'Enter') { if (!e.repeat) use(); e.preventDefault(); return; }
   if (e.code === 'Escape') { closeDialog(); return; }
@@ -308,13 +314,45 @@ addEventListener('keydown', e => {
   if (e.code === 'Digit0' && !e.repeat) { clearPlayerPose(); e.preventDefault(); return; }
   keys.add(e.code);
 });
-addEventListener('keyup', e => keys.delete(e.code));
-addEventListener('blur', () => keys.clear());
+addEventListener('keyup', e => {
+  keys.delete(e.code);
+  if (e.code === 'ControlLeft' || e.code === 'ControlRight') {
+    if (!e.getModifierState('Control')) {
+      ctrlHeld = false;
+      if (started && !uiBlocksGame() && !isTouchPlay()) requestLookLock();
+    }
+  }
+});
+addEventListener('blur', () => { keys.clear(); ctrlHeld = false; });
 
 const joy = { id: null, x: 0, y: 0 };
 const JOY_R = 52;
 const look = { id: null, x: 0, y: 0 };
 const joyEl = $('joy');
+const LOOK_SENS = 0.0024;
+
+function isTouchPlay() {
+  return document.body.classList.contains('touch');
+}
+function pointerLocked() {
+  return document.pointerLockElement === canvas;
+}
+function exitLookLock() {
+  if (document.pointerLockElement) document.exitPointerLock?.();
+}
+function requestLookLock() {
+  if (!started || uiBlocksGame() || isTouchPlay() || pointerLocked() || ctrlHeld) return;
+  try {
+    const p = canvas.requestPointerLock?.({ unadjustedMovement: true });
+    if (p && typeof p.catch === 'function') p.catch(() => canvas.requestPointerLock?.());
+  } catch {
+    canvas.requestPointerLock?.();
+  }
+}
+/** Popup đóng bằng E/Esc: giữ khóa chuột. UI cần gõ/click thì thả. */
+function maybeRelock() {
+  if (started && !uiBlocksGame() && !isTouchPlay() && !ctrlHeld) requestLookLock();
+}
 
 function joyCenter() {
   const r = joyEl.getBoundingClientRect();
@@ -363,9 +401,13 @@ function trackPinch(e, down) {
   else pinchPts.delete(e.pointerId);
   syncPinchBase();
 }
+function applyLookDelta(dx, dy, k = LOOK_SENS) {
+  yaw -= dx * k;
+  pitch = clamp(pitch + dy * k * 0.8, -0.15, 1.3);
+}
 
 joyEl.addEventListener('pointerdown', e => {
-  if (!started || uiBlocksGame() || !document.body.classList.contains('touch')) return;
+  if (!started || uiBlocksGame() || !isTouchPlay()) return;
   unlockAudio();
   e.preventDefault();
   e.stopPropagation();
@@ -377,9 +419,13 @@ canvas.addEventListener('pointerdown', e => {
   trackPinch(e, true);
   if (!started || uiBlocksGame() || ptrOnUi(e.target)) return;
   unlockAudio();
-  if (e.pointerType === 'touch' && document.body.classList.contains('touch')) {
-    if (e.clientX < innerWidth * 0.42) return;
+  // Desktop: pointer lock (FPS) — không cần giữ kéo
+  if (e.pointerType !== 'touch' && !isTouchPlay()) {
+    requestLookLock();
+    return;
   }
+  // Touch: kéo nửa phải màn hình để xoay
+  if (e.clientX < innerWidth * 0.42) return;
   if (look.id === null) {
     Object.assign(look, { id: e.pointerId, x: e.clientX, y: e.clientY });
   }
@@ -392,12 +438,17 @@ addEventListener('pointermove', e => {
   }
   if (e.pointerId === joy.id) setJoyFromPointer(e.clientX, e.clientY);
   else if (e.pointerId === look.id) {
-    const k = e.pointerType === 'touch' ? 0.008 : 0.005;
-    yaw -= (e.clientX - look.x) * k;
-    pitch = clamp(pitch + (e.clientY - look.y) * k * 0.8, -0.15, 1.3);
+    applyLookDelta(e.clientX - look.x, e.clientY - look.y, 0.008);
     look.x = e.clientX;
     look.y = e.clientY;
   }
+});
+addEventListener('mousemove', e => {
+  if (!pointerLocked() || uiBlocksGame()) return;
+  applyLookDelta(e.movementX, e.movementY);
+});
+document.addEventListener('pointerlockchange', () => {
+  canvas.classList.toggle('looking', pointerLocked());
 });
 function endPointer(e) {
   trackPinch(e, false);
@@ -442,6 +493,7 @@ function showDialog(title, text, kicker = '') {
 function closeDialog() {
   $('dialog').hidden = true;
   dialogOpen = false;
+  maybeRelock();
 }
 $('dlgClose').addEventListener('click', closeDialog);
 
@@ -468,12 +520,13 @@ function openGuestbook() {
   bookOpen = true;
   $('guestbook').hidden = false;
   renderGuestbook(mp.notes);
-  $('gbInput').focus();
+  // Không auto-focus ô gõ — giữ pointer lock, đóng bằng E. Muốn gõ: giữ Ctrl → click ô.
 }
 function closeGuestbook() {
   bookOpen = false;
   $('guestbook').hidden = true;
   releaseGameFocus();
+  maybeRelock();
 }
 const NEAR_CHAT_MAX = 24;
 function appendNearChat(who, text, me = false) {
@@ -487,6 +540,7 @@ function appendNearChat(who, text, me = false) {
   log.scrollTop = log.scrollHeight;
 }
 function openChat() {
+  exitLookLock();
   chatOpen = true;
   $('chatBar').hidden = false;
   $('chatInput').focus();
@@ -495,6 +549,7 @@ function closeChat() {
   chatOpen = false;
   $('chatBar').hidden = true;
   releaseGameFocus();
+  maybeRelock();
 }
 let netHintShown = false;
 let lastOnlineN = 1;
@@ -626,8 +681,14 @@ const mp = createMultiplayer({
 });
 $('bookBtn').addEventListener('click', () => (bookOpen ? closeGuestbook() : openGuestbook()));
 $('bxhBtn')?.addEventListener('click', () => (boardOpen ? closeLeaderboard() : openLeaderboard()));
-$('galClose')?.addEventListener('click', () => { galleryOpen = false; closeGallery(); releaseGameFocus(); });
-$('galClose2')?.addEventListener('click', () => { galleryOpen = false; closeGallery(); releaseGameFocus(); });
+function closeGalleryUi() {
+  galleryOpen = false;
+  closeGallery();
+  releaseGameFocus();
+  maybeRelock();
+}
+$('galClose')?.addEventListener('click', closeGalleryUi);
+$('galClose2')?.addEventListener('click', closeGalleryUi);
 $('lbClose')?.addEventListener('click', closeLeaderboard);
 $('lbClose2')?.addEventListener('click', closeLeaderboard);
 
@@ -664,6 +725,7 @@ function closeLeaderboard() {
   boardOpen = false;
   $('leaderboard').hidden = true;
   releaseGameFocus();
+  maybeRelock();
 }
 $('gbClose').addEventListener('click', closeGuestbook);
 $('gbForm').addEventListener('submit', e => {
@@ -706,6 +768,7 @@ function sayOwnOnRemote(m) {
 }
 function showTalkInvite(m) {
   if (talk || invite) { mp.talkAnswer(m.from, false); return; }
+  exitLookLock();
   invite = m;
   $('tiText').textContent = `${m.name} (${m.info}) muốn trò chuyện với bạn.`;
   $('talkInvite').hidden = false;
@@ -720,6 +783,7 @@ function answerInvite(ok) {
   clearTimeout(inviteTimer);
   $('talkInvite').hidden = true;
   releaseGameFocus();
+  if (!ok) maybeRelock();
 }
 $('tiYes').addEventListener('click', () => answerInvite(true));
 $('tiNo').addEventListener('click', () => answerInvite(false));
@@ -735,6 +799,7 @@ function appendTalk(name, text, cls = '') {
   $('tpLog').scrollTop = $('tpLog').scrollHeight;
 }
 function startTalk(m) {
+  exitLookLock();
   talk = { peer: m.peer, name: m.name };
   $('tpTitle').textContent = `Đang trò chuyện với ${m.name}`;
   $('tpLog').replaceChildren();
@@ -748,6 +813,7 @@ function closeTalk() {
   $('talkPanel').hidden = true;
   $('tpRing').hidden = true;
   releaseGameFocus();
+  maybeRelock();
 }
 $('tpForm').addEventListener('submit', e => {
   e.preventDefault();
@@ -880,6 +946,7 @@ function appendClassMsg(msg) {
   if (atBottom || li.className === 'me') log.scrollTop = log.scrollHeight;
 }
 function openClass() {
+  exitLookLock();
   classOpen = true;
   keys.clear();
   classUnread = 0;
@@ -896,6 +963,7 @@ function closeClass() {
   classOpen = false;
   $('classPanel').hidden = true;
   releaseGameFocus();
+  maybeRelock();
 }
 $('classBtn').addEventListener('click', () => (classOpen ? closeClass() : openClass()));
 $('clsClose').addEventListener('click', closeClass);
@@ -1004,7 +1072,7 @@ function use() {
   unlockAudio();
   if (bookOpen) { closeGuestbook(); return; }
   if (boardOpen) { closeLeaderboard(); return; }
-  if (galleryOpen) { galleryOpen = false; closeGallery(); releaseGameFocus(); return; }
+  if (galleryOpen) { closeGalleryUi(); return; }
   if (dialogOpen) { closeDialog(); return; }
   if (!current) return;
   if (current.action === 'classroom-door') {
@@ -1431,8 +1499,11 @@ function start() {
   releaseGameFocus();
   toast(`Chào mừng bạn về trường! Tìm ${TOTAL} kỷ vật đang phát sáng, sút bóng & xem album ảnh thật nhé.`, 5200);
   pushStats();
-  if (document.body.classList.contains('touch')) {
+  if (isTouchPlay()) {
     setTimeout(() => toast('Joystick góc trái để đi; kéo vùng phải xoay camera; hai ngón zoom.', 5200), 1200);
+  } else {
+    setTimeout(() => toast('Chuột xoay góc nhìn · giữ Ctrl hiện chuột · Esc thả chuột · popup (E) không cần chuột.', 5200), 1200);
+    requestLookLock();
   }
   mp.connect();
   canvas.focus?.();
@@ -1448,6 +1519,7 @@ const profileForm = setupProfileForm({
       $('intro').hidden = true;
       $('intro').classList.remove('ingame');
       toast('Đã cập nhật nhân vật.');
+      maybeRelock();
     }
   },
 });
@@ -1486,6 +1558,7 @@ $('nextBtn').addEventListener('click', () => { unlockAudio(); showStep(2); $('pf
 $('backBtn').addEventListener('click', () => { showStep(1); refreshResumeWelcome(); });
 refreshResumeWelcome();
 $('profileBtn').addEventListener('click', () => {
+  exitLookLock();
   menuOpen = true;
   keys.clear();
   profileForm.open();
@@ -1500,9 +1573,14 @@ addEventListener('keydown', e => {
   if (chatOpen) { closeChat(); return; }
   if (classOpen) { closeClass(); return; }
   if (bookOpen) { closeGuestbook(); return; }
-  if (galleryOpen) { galleryOpen = false; closeGallery(); releaseGameFocus(); return; }
+  if (galleryOpen) { closeGalleryUi(); return; }
   if (boardOpen) { closeLeaderboard(); return; }
-  if (menuOpen) { menuOpen = false; $('intro').hidden = true; $('intro').classList.remove('ingame'); }
+  if (menuOpen) {
+    menuOpen = false;
+    $('intro').hidden = true;
+    $('intro').classList.remove('ingame');
+    maybeRelock();
+  }
 });
 
 applyProfile(profile);
